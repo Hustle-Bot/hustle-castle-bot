@@ -30,7 +30,9 @@ class BefehlsnamenTest {
             // 22.10. abends aus dem Hauptbot
             "!gembay", "!portal", "!foodchests",
             // 24.10.
-            "!glyphs", "!glyph");
+            "!glyphs", "!glyph",
+            // 25.11.
+            "!throneroom");
 
     @Test
     void ersterNameJederGruppeIstEnglisch() {

@@ -93,9 +93,13 @@ public final class Thronsaal {
     public static synchronized void merken(String name, int stufe) {
         if (name == null || schluessel(name).length() < 2 || stufe < 1 || stufe > 30) return;
         Map<String, Integer> alle = lesen();
-        alle.entrySet().removeIf(e -> schluessel(e.getKey()).equals(schluessel(name)));
+        alle.entrySet().removeIf(e -> !e.getKey().equals(STANDARD) && schluessel(e.getKey()).equals(schluessel(name)));
         alle.put(name.strip(), stufe);
-        StringBuilder sb = new StringBuilder("# Thronsaal je Spielkonto (Name=Stufe), vom Team-Scan aus dem Profil gelesen.\n");
+        schreiben(alle);
+    }
+
+    private static void schreiben(Map<String, Integer> alle) {
+        StringBuilder sb = new StringBuilder("# Thronsaal je Spielkonto (Name=Stufe), vom Team-Scan aus dem Profil gelesen. standard= gilt fuer unbekannte Konten (!thronsaal).\n");
         alle.forEach((n, s) -> sb.append(n).append('=').append(s).append('\n'));
         try {
             Files.writeString(DATEI, sb.toString(), StandardCharsets.UTF_8);
@@ -109,23 +113,45 @@ public final class Thronsaal {
      * Teilname: "Zweitkonto" passt zu Left UND Zweitkonto B, die verschiedene Stufen haben werden.
      */
     public static synchronized int stufe(String name) {
-        if (name == null || name.isBlank()) return -1;
-        String f = schluessel(name);
         Map<String, Integer> alle = lesen();
+        int standard = alle.getOrDefault(STANDARD, -1);
+        if (name == null || name.isBlank()) return standard;
+        String f = schluessel(name);
         for (var e : alle.entrySet()) {
-            if (schluessel(e.getKey()).equals(f)) return e.getValue();
+            if (!e.getKey().equals(STANDARD) && schluessel(e.getKey()).equals(f)) return e.getValue();
         }
         // Lesefehler ("-ZweitkontołA" fuer "Zweitkonto A"): ab 8 Zeichen hoechstens 2 anders -- aber nur, wenn genau ein
         // Konto so nah ist ("Left" und "Zweitkonto B" liegen 4 auseinander und werden nie verwechselt).
-        if (f.length() < 8) return -1;
+        if (f.length() < 8) return standard;
         int treffer = -1, anzahl = 0;
         for (var e : alle.entrySet()) {
+            if (e.getKey().equals(STANDARD)) continue;
             if (Gegnerbuch.abstand(schluessel(e.getKey()), f, 2) <= 2) {
                 treffer = e.getValue();
                 anzahl++;
             }
         }
-        return anzahl == 1 ? treffer : -1;
+        return anzahl == 1 ? treffer : standard;
+    }
+
+    /**
+     * Zeile "standard=8" in thronsaal.txt (Nutzer 25.11., !thronsaal 8): gilt fuer jedes Konto, dessen Stufe der Team-Scan noch
+     * nicht gelesen hat -- sonst setzte der Motor beim Start eines Modus die Stufe ohne bekannten Kontonamen wieder auf "unbekannt".
+     */
+    static final String STANDARD = "standard";
+
+    /** Die Stufe von Hand setzen: fuer das Konto, wenn sein Name bekannt ist, sonst als Standard. Gilt sofort. */
+    public static synchronized void vonHandSetzen(String name, int stufe) {
+        if (stufe < 1 || stufe > 30) return;
+        if (name != null && schluessel(name).length() >= 2) merken(name, stufe);
+        else merkenRoh(STANDARD, stufe);
+        aktuell = stufe;
+    }
+
+    private static void merkenRoh(String schluessel, int stufe) {
+        Map<String, Integer> alle = lesen();
+        alle.put(schluessel, stufe);
+        schreiben(alle);
     }
 
     /** Hat dieses Konto den Teil schon? Unbekannte Stufe = ja (nichts sperren, was man nicht weiss). */

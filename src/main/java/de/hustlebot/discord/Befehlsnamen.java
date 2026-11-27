@@ -81,6 +81,7 @@ public final class Befehlsnamen {
             List.of("!stigmas", "!stigma", "!stigmata", "!stigmen"),   // !stigmas loeschen/leveln/einstellen (Hauptbot 10./11.10.)
             // Arena (Hauptbot, Freunde 3.0)
             List.of("!arenareserve", "!reserve", "!arenatickets", "!ticketreserve"),
+            List.of("!throneroom", "!thronsaal", "!ts"),   // Nutzer 25.11.
             List.of("!arenareport", "!arenastats", "!arenabericht", "!arenastatistik"),
             List.of("!notes", "!notizen", "!notizblock"),
             List.of("!note", "!notiz"),

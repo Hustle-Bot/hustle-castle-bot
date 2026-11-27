@@ -1671,6 +1671,7 @@ public final class ArenaMode implements GameMode {
 
     /** Den naechsten Gegner, dessen Pals fehlen, einzeln anklicken -- beim Blaettern fehlt die Pfote. */
     private Outcome palBesuchStarten(Mat screen, BotContext ctx) {
+        if (ArenaEinfach.aktiv()) return null;   // TS8: keine Pals
         if (!ArenaExtras.pals() || !ctx.matcher().has("ar_pal_knopf")) return null;
         for (Schild s : schilderLesen(screen, ctx)) {
             if (s.name().isBlank() || s.botClan() || s.gesperrt()) continue;
@@ -2124,6 +2125,7 @@ public final class ArenaMode implements GameMode {
     private boolean brauchtPruefung(BotContext ctx, String name, String clan, String schluessel,
                                     boolean ohneClan) {
         if (schluessel.isEmpty() || ohneClan) return false;
+        if (ArenaEinfach.aktiv()) return false;   // TS8 (Nutzer 25.11.): keine Einheiten-Pruefung, nur die Bilanz zaehlt
         // Hauptbot 11.10. (Stage 5): Spieler, die schon angegriffen wurden, muss der Bot nicht mehr
         // anschauen -- sie sind in diesem Turnier verbraucht, die Pruefzeit gehoert den anderen.
         if (schonAngegriffen.contains(schluessel) || schonAngegriffen.contains(namensSchluessel(name))) return false;
@@ -3142,6 +3144,7 @@ public final class ArenaMode implements GameMode {
      * Einheit." Nur wenn das Ziel in dieser Stage weder kurz noch ganz angesehen wurde und sein Aussehen gemerkt ist.
      */
     private boolean vorAngriffBlickNoetig(String schluessel) {
+        if (ArenaEinfach.aktiv()) return false;   // TS8: kein Schnell-Blick
         if (schluessel.isEmpty() || aussehenInRunde.contains(schluessel) || geprueftInRunde.contains(schluessel)) return false;
         if (!ArenaAussehen.bekannt(schluessel)) return false;
         long rest = restSekunden();
@@ -3156,6 +3159,7 @@ public final class ArenaMode implements GameMode {
      * angesehen -- und wenn die Zeit reicht.
      */
     private boolean brauchtSchnellblick(String schluessel, String name, String clan, boolean ohneClan) {
+        if (ArenaEinfach.aktiv()) return false;   // TS8: kein Schnell-Blick
         if (schluessel.isEmpty() || ohneClan || sicherNamen.contains(schluessel)) return false;
         if (gesperrtNichtAnsehen(name, clan, schluessel)) return false;
         // Nur wer im Notizblock gepruefte Werte hat -- sonst haette "gleich" nichts, was weiter gelten koennte
@@ -3250,6 +3254,7 @@ public final class ArenaMode implements GameMode {
      * Dann nur die nachholen -- zwei kleine Fenster statt 20 s Einheiten.
      */
     private boolean brauchtExtras(String name, String clan, String schluessel, boolean ohneClan, boolean pfote) {
+        if (ArenaEinfach.aktiv()) return false;   // TS8: keine Schirmherren/Pals
         if (schluessel.isEmpty() || ohneClan || pruefVersucht.contains(schluessel)) return false;
         var notiz = buch.nachschlagen(name, clan);
         if (notiz.isEmpty() || !notiz.get().geprueftSeit(PRUEFUNG_GILT_TAGE)) return false;
@@ -6731,10 +6736,54 @@ public final class ArenaMode implements GameMode {
         return buch.nachschlagen(s.name(), s.clan()).map(Gegnerbuch.Notiz::sets).orElse("");
     }
 
+    /** Gilt die einfache TS8-Strategie (ArenaEinfach)? Liest Schalter und Stufe sofort neu (fuer !thronsaal). */
+    public static boolean einfacheStrategie() {
+        ArenaEinfach.neuLesen();
+        return ArenaEinfach.aktiv();
+    }
+
+    /**
+     * TS8-Wahl (Nutzer 25.11., ArenaEinfach): nur Bilanz und Schild-Punkte. Kraft, Sets, Liste der Punkte und Top-3-Rechnung
+     * spielen keine Rolle. Die Regeln stehen in ArenaEinfach (getestet), hier nur Schilder rein und Protokoll.
+     */
+    private Optional<Schild> einfachWaehlen(List<Schild> auswahl, int runde) {
+        if (auswahl.isEmpty()) return Optional.empty();
+        List<ArenaEinfach.Kandidat> k = new ArrayList<>();
+        for (Schild s : auswahl) {
+            k.add(new ArenaEinfach.Kandidat(s.name(), s.punkte(), ArenaEinfach.bewertung(s.name(), meineStaerke)));
+            anzeigeMerken(s.name(), s.clan());
+        }
+        int i = ArenaEinfach.wahl(k, runde);
+        if (i < 0) return Optional.empty();
+        Schild z = auswahl.get(i);
+        ArenaEinfach.Kandidat kz = k.get(i);
+        if (!namensSchluessel(z.name()).equals(zuletztGewaehlt)) {
+            StringBuilder alle = new StringBuilder();
+            for (int j = 0; j < k.size(); j++) {
+                if (j > 0) alle.append(" · ");
+                alle.append(auswahl.get(j).wer()).append(' ').append(ArenaEinfach.lohn(runde, k.get(j).schildPunkte()))
+                        .append(" (").append(ArenaEinfach.text(k.get(j).bewertung())).append(')');
+            }
+            String oben = ArenaEinfach.ueberMir(runde, kz.schildPunkte()) ? Sprache.t("above me", "ueber mir") : Sprache.t("below me", "unter mir");
+            Log.info("Arena", Sprache.t("Choice (TS" + ArenaEinfach.STUFE + ", round " + runde + "): " + z.wer() + " -- "
+                            + ArenaEinfach.lohn(runde, kz.schildPunkte()) + " points, " + (runde >= 2 ? oben + ", " : "")
+                            + ArenaEinfach.text(kz.bewertung()) + ", " + Math.round(kz.bewertung().chance() * 100) + " %. All: " + alle,
+                    "Wahl (TS" + ArenaEinfach.STUFE + ", Runde " + runde + "): " + z.wer() + " -- "
+                            + ArenaEinfach.lohn(runde, kz.schildPunkte()) + " Punkte, " + (runde >= 2 ? oben + ", " : "")
+                            + ArenaEinfach.text(kz.bewertung()) + ", " + Math.round(kz.bewertung().chance() * 100) + " %. Alle: " + alle));
+            fotoSerie("wahl");
+            zuletztGewaehlt = namensSchluessel(z.name());
+        }
+        return Optional.of(z);
+    }
+
     private Optional<Schild> zielWaehlen(List<Schild> schilder, int runde) {
         // Autor 19.10.: "Wenn man dreimal gegen einen Spieler verliert, wird er gesperrt und nicht mehr angegriffen."
         // Gezaehlt am Namen ueber alle Clan-Schreibweisen; drei Niederlagen ohne einen Sieg = nie mehr angreifen.
-        List<Schild> erlaubt = schilder.stream().filter(s -> !s.gesperrt() && !dreimalVerloren(s) && !opGesperrt(s)).toList();
+        // TS8 (Nutzer 25.11.): nur die harte Liste (ar_block_) sperrt -- "dreimal verloren" und OP-Items nicht, die Bilanz entscheidet
+        // dort selbst und wird nach 5 % mehr eigener Kraft neu bewertet.
+        boolean einfach = ArenaEinfach.aktiv();
+        List<Schild> erlaubt = schilder.stream().filter(s -> !s.gesperrt() && (einfach || (!dreimalVerloren(s) && !opGesperrt(s)))).toList();
         if (erlaubt.isEmpty()) return Optional.empty();
 
         // VERBRAUCHTE HERAUSNEHMEN -- aber nie bis zur Leere.
@@ -6775,6 +6824,7 @@ public final class ArenaMode implements GameMode {
                     .noneMatch(g -> Math.abs(g[0] - s.x()) < 40 && Math.abs(g[1] - s.y()) < 40)).toList();
             if (!ohneGrau.isEmpty()) auswahl = ohneGrau;
         }
+        if (einfach) return einfachWaehlen(auswahl, runde);
         // Stage 1 (Autor, 11.10.): "In der ersten Runde bitte immer den schwaechsten Gegner angreifen, den er findet."
         // Der mit der kleinsten bekannten Kraft (Durchschauen oder Notizblock); "niemals" ist oben schon raus.
         // Kennt der Bot keine Kraft, gilt wie bisher: einer der Plaetze 4-9.
@@ -8745,7 +8795,7 @@ public final class ArenaMode implements GameMode {
         // gelesen), im Fenster standen dann 53,7 Mio gegen 34,5 Mio -- angegriffen, verloren, am Ende Platz 8. War die Kraft
         // bei der Wahl unbekannt und ist der Gegner hier ueber 30 % staerker: Kraft merken, EINMAL je Runde und Gegner zurueck
         // zur Pyramide und neu waehlen (mit bekannter Kraft faellt er dort nach hinten).
-        if (istZiel && meine > 0 && seine > meine * 13 / 10 && imKampfGegen != null && bekannteStaerke(imKampfGegen) <= 0
+        if (istZiel && !ArenaEinfach.aktiv() && meine > 0 && seine > meine * 13 / 10 && imKampfGegen != null && bekannteStaerke(imKampfGegen) <= 0
                 && zuStarkZurueck.add(rundeZuletzt + ":" + namensSchluessel(imKampfGegen.name()))) {
             if (!namensSchluessel(imKampfGegen.name()).isBlank()) staerken.put(namensSchluessel(imKampfGegen.name()), seine);
             Log.info("Arena", Sprache.t("Chosen with unknown power, but here they have " + seine + " against my " + meine
@@ -8795,7 +8845,7 @@ public final class ArenaMode implements GameMode {
         // nur fuer das Ziel. Jetzt wird auch der Angezeigte geprueft (Sperrdatei, Name eines niemals-Bildes, Notizblock 0 Siege aus 3).
         boolean netzAn = de.hustlebot.core.ArenaRegelnNeu.an();
         boolean fremdPruefen = netzAn && !istZiel && genugGesehen;
-        if ((istZiel || fremdPruefen) && imKampfGegen != null
+        if ((istZiel || fremdPruefen) && imKampfGegen != null && !ArenaEinfach.aktiv()
                 && (seine > 0 || swords.isPresent() || (netzAn && !werDaSteht.isBlank()))
                 && gesperrtZurueck.add(sperrSchluessel)) {
             aussehenHier = swords.isPresent() ? ArenaSperrBilder.ausVergleich(bild, swords.get().x(), swords.get().y())
@@ -9166,7 +9216,7 @@ public final class ArenaMode implements GameMode {
      * null = nichts zu tun, dann wird wie bisher gewartet.
      */
     private Outcome nachAngriffDurchschauen(Mat screen, BotContext ctx) {
-        if (!rundeGespielt) return null;
+        if (!rundeGespielt || ArenaEinfach.aktiv()) return null;
         // Autor 01.11.: "in Stage 5, nachdem der Bot angegriffen hat, soll er nicht mehr die anderen Gegner anschauen."
         if (rundeZuletzt >= LETZTE_RUNDE) return null;
         long jetzt = System.currentTimeMillis();
@@ -9220,6 +9270,7 @@ public final class ArenaMode implements GameMode {
 
     /** Aus der Pyramide ins Vergleichsfenster, nur um durchzuschauen (neuer Rundgang). */
     private Outcome erkundungStarten(Mat screen, BotContext ctx, int runde, long rest) {
+        if (ArenaEinfach.aktiv()) return null;   // TS8 (Nutzer 25.11.): kein Durchschauen -- Kraft und Sets zaehlen nicht
         boolean schnell = runde <= 1 && !schnellstartGemacht;
         List<Schild> schilder = schnell ? schildLagen(screen, ctx) : List.of();
         if (schilder.isEmpty()) {
@@ -9336,7 +9387,9 @@ public final class ArenaMode implements GameMode {
                     || (!ctx.visible(screen, T_HOME_RESULT) && steht < 6000)) {
                 return Outcome.WAITING;
             }
-            namensbildVormerken();
+            // TS8: keine Listenbilder nach den TS11-Regeln (7 s / 14 s) -- dort zaehlt nur die Bilanz in arena-ts8.txt.
+            if (ArenaEinfach.aktiv()) vorlageFuer = null;
+            else namensbildVormerken();
             offenesErgebnisEintragen();
         }
 
@@ -10072,6 +10125,10 @@ public final class ArenaMode implements GameMode {
                 einheitenVon.getOrDefault(namensSchluessel(imKampfGegen.name()), ""), kampfAussehen,
                 seinNamensbild == null ? null : seinNamensbild.fingerabdruck(), ergebnisSieg);
         kampfAussehen = null;
+        // TS8 (Nutzer 25.11.): Bilanz mit der eigenen Kraft zum Kampf -- steigt sie um 5 %, wird der Gegner neu bewertet.
+        if (ArenaEinfach.aktiv() && !imKampfGegen.name().isBlank() && !unleserlich(imKampfGegen.name())) {
+            ArenaEinfach.eintragen(imKampfGegen.name(), ergebnisSieg, meineStaerke);
+        }
         // Genau EINMAL je Kampf: ohne das Zuruecksetzen von imKampfGegen
         // wuerde derselbe Kampf ein Dutzend Mal in der Bilanz landen.
         if (istBot(imKampfGegen.clan()) || imKampfGegen.botClan()) {

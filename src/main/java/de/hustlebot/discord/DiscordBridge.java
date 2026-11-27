@@ -618,6 +618,8 @@ public final class DiscordBridge {
                 case "!team", "!teamscan" -> commandTeam(kanal, rest, rest);
                 // Arena (aus dem Hauptbot, Freunde 3.0)
                 case "!arenareserve" -> arenaReserve(rest);
+                // Nutzer 25.11.: Thronsaal-Stufe von Hand (sonst liest sie der Team-Scan); TS8 = einfache Arena-Strategie.
+                case "!throneroom", "!thronsaal", "!ts" -> thronsaal(rest);
                 case "!arenabericht", "!arenareport", "!arenastatistik", "!arenastats" -> arenaBerichtSchalter(rest);
                 case "!notizen", "!notizblock", "!notes" -> notizen();
                 case "!notiz", "!note" -> notiz(kanal, rest);
@@ -748,7 +750,7 @@ public final class DiscordBridge {
                 + "`!start lighthouse`  ·  `!start colosseum`  ·  `!start titantower` (`!tower`)  ·  `!start clanstore` (`!clanstore`)\n"
                 + "`!team` what the bot knows about your squad  ·  `!team scan` look at it now\n"
                 + "`!stop`  ·  `!pause`  ·  `!resume`  ·  `!castle` back to the castle  ·  `!emergency`\n\n"
-                + "🏟️ **Arena**  `!start arena 5` (tickets)  ·  `!start arena 5 food`  ·  `!notes`  ·  `!list`  ·  `!arenareserve 10`  ·  `!arena Rina safe`\n\n"
+                + "🏟️ **Arena**  `!start arena 5` (tickets)  ·  `!start arena 5 food`  ·  `!notes`  ·  `!list`  ·  `!arenareserve 10`  ·  `!arena Rina safe`  ·  `!throneroom 8`\n\n"
                 + "📋 **Queue**  `!after dungeon 20`  ·  `!queue`\n\n"
                 + "⚔️ **Clan war**  `!clanwar on` / `off`  ·  `!settings`\n\n"
                 + "👀 **Look in**  `!status`  ·  `!stats`  ·  `!times` cathedral times  ·  `!specs`  ·  `!screenshot`  ·  `!watch 5` photo every 5 min  ·  `!live`  ·  `!log`  ·  `!cleaner` PC cleaner\n\n"
@@ -765,7 +767,7 @@ public final class DiscordBridge {
                 + "`!start lighthouse`  ·  `!start colosseum`  ·  `!start titantower` (`!tower`)  ·  `!start clanstore` (`!clanstore`)\n"
                 + "`!team` was der Bot über deine Truppe weiß  ·  `!team scan` jetzt ansehen\n"
                 + "`!stop`  ·  `!pause`  ·  `!resume`  ·  `!burg` zurück in die Burg  ·  `!notaus`\n\n"
-                + "🏟️ **Arena**  `!start arena 5` (Tickets)  ·  `!start arena 5 aepfel`  ·  `!notizen`  ·  `!liste`  ·  `!arenareserve 10`  ·  `!arena Rina sicher`\n\n"
+                + "🏟️ **Arena**  `!start arena 5` (Tickets)  ·  `!start arena 5 aepfel`  ·  `!notizen`  ·  `!liste`  ·  `!arenareserve 10`  ·  `!arena Rina sicher`  ·  `!thronsaal 8`\n\n"
                 + "📋 **Warteschlange**  `!after dungeon 20`  ·  `!queue`\n\n"
                 + "⚔️ **Clan-Krieg**  `!clanwar on` / `off`  ·  `!settings`\n\n"
                 + "👀 **Nachsehen**  `!status`  ·  `!stats`  ·  `!zeiten` Kathedralen-Zeiten  ·  `!specs`  ·  `!screenshot`  ·  `!wach 5` alle 5 Min ein Foto  ·  `!live`  ·  `!log`  ·  `!reiniger` PC-Cleaner\n\n"
@@ -1829,6 +1831,24 @@ public final class DiscordBridge {
                        : Sprache.t("No reserve -- the bot plays as long as there are tickets.",
                                    "Keine Reserve -- der Bot spielt, solange Tickets da sind."))
                 + Sprache.t("\n`!arenareserve 10` · `!arenareserve 0` (off)", "\n`!arenareserve 10` · `!arenareserve 0` (aus)"),
+                DiscordClient.FARBE_INFO);
+    }
+
+    /** "!thronsaal 8": Stufe des Kontos von Hand setzen (thronsaal.txt); ohne Zahl nur anzeigen. */
+    private void thronsaal(String rest) {
+        String w = rest == null ? "" : rest.trim();
+        String konto = de.hustlebot.core.Konten.aktiv();
+        if (konto.isBlank()) konto = de.hustlebot.bot.MeinTeam.spielername();
+        if (w.matches("\\d{1,2}")) de.hustlebot.core.Thronsaal.vonHandSetzen(konto, Integer.parseInt(w));
+        int stufe = de.hustlebot.core.Thronsaal.stufe(konto);
+        if (stufe > 0) de.hustlebot.core.Thronsaal.aktuellSetzen(stufe);
+        boolean einfach = de.hustlebot.bot.ArenaMode.einfacheStrategie();
+        String wer = konto.isBlank() ? Sprache.t("(account name not known yet)", "(Kontoname noch unbekannt)") : konto;
+        client.sendCard(Sprache.t("Throne room: ", "Thronsaal: ") + (stufe > 0 ? stufe : "?") + " -- " + wer,
+                Sprache.t("Arena strategy: " + (einfach ? "simple (only the own record per opponent)" : "full (power, sets, checks)") + ".\n"
+                                + "Modes this level does not have yet are skipped (e.g. Dungeon from 9).\n`!throneroom 8` sets the level.",
+                        "Arena-Strategie: " + (einfach ? "einfach (nur die eigene Bilanz je Gegner)" : "voll (Kraft, Sets, Pruefungen)") + ".\n"
+                                + "Modi, die es auf dieser Stufe noch nicht gibt, werden uebersprungen (z. B. Verlies ab 9).\n`!thronsaal 8` setzt die Stufe."),
                 DiscordClient.FARBE_INFO);
     }
 
